@@ -1,16 +1,44 @@
-from agents.tool import function_tool
-@function_tool()
-async def meal_plan(diet_type: str = "balanced") -> dict:
+from agents import function_tool, Agent, Runner, RunContextWrapper
+from typing import List
+from pydantic import BaseModel
+from context.session_context import UserSessionContext
+from config import run_config
+
+
+class MealPlanner(BaseModel):
+    days: List[str]
+
+
+
+@function_tool
+async def meal_planner(ctx: RunContextWrapper[UserSessionContext], diet_preference: str) -> MealPlanner:
     """
-    Suggests a meal plan based on dietary preference.
+    Generates a 7-day meal plan according to user diet_preference.
     """
-    return {
-        "Monday": "Grilled chicken with veggies (500 kcal)",
-        "Tuesday": "Lentil soup and whole grain bread (450 kcal)",
-        "Wednesday": "Tofu stir-fry with brown rice (520 kcal)",
-        "Thursday": "Salmon salad with avocado (480 kcal)",
-        "Friday": "Vegetable pasta (500 kcal)",
-        "Saturday": "Chickpea curry and rice (530 kcal)",
-        "Sunday": "Zucchini noodles and pesto (460 kcal)",
-        "Diet Type": diet_type
-    }
+    
+    if diet_preference.lower() not in ["vegetarian", "non-vegetarian", "keto", "vegan"]:
+        raise ValueError("Please choose a valid diet preference: vegetarian, non-vegetarian, keto, or vegan.")
+
+
+    instructions = (
+        f"Create a 7-day {diet_preference.lower()} meal plan in list format (one string per day). "
+        f"Make sure to follow the {diet_preference.lower()} diet strictly."
+        f"Respond ONLY with a list of 7 meal suggestio ns."
+    )
+
+    dynamic_agent = Agent(
+        name="Meal Planner Agent",
+        instructions= instructions,
+        output_type=MealPlanner
+    )
+
+    result = await Runner.run(
+        dynamic_agent,
+        input=diet_preference,
+        context=ctx.context,
+        run_config=run_config
+    )
+
+    ctx.context.meal_plan = result.final_output
+
+    return result.final_output
